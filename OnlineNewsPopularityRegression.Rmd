@@ -1,0 +1,288 @@
+---
+title: "ML 4375 Project 2 - Regression"
+author: "Supratik Pochampally"
+abstract: "For my regression dataset, I chose the Online News Popularity dataset from the UCI Machine Learning Repository. The purpose of the dataset is to use attributes such as the sentiment polarity, rate of positive and negative words, and other features about articles published by Mashable in a period of two years to predict the number of shares in social networks that the article got (the popularity of the article)."
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Dataset
+
+Let's start by reading in the dataset and printing the number of rows and column names:
+
+```{r}
+# Read in the .csv file of the data set
+df <- read.csv("OnlineNewsPopularity.csv", header = TRUE)
+# Print number of rows
+print(paste("Number of rows:", nrow(df)))
+# Print attributes
+names(df)
+```
+
+We see that the data set is large, with 39,644 rows and many columns, some being very ambiguously named. 
+
+# Data cleaning
+
+Link to source: https://archive.ics.uci.edu/ml/datasets/Online+News+Popularity
+
+Because the dataset is messy and needs cleaning, we will identify what predictors we want to use to predict our target column, being the "shares" column.
+
+With a whopping 61 columns, it would be most efficient to go through them and identify what seem like the best contributing factors. We can quickly eliminate url, since it's just a long string that our algorithms would likely have trouble deciphering. Furthermore, there is no clear description of what the LDA_00 - LDA_04 and kw attributes are, so we should remove them to make sure we aren't using non-predictive columns. 
+
+Next, let's discuss what attributes would likely have an impact on number of shares. The actual length of the article and the number of images and videos contribute to the readability of an article, which could affect the number of shares. Furthermore, the data channel or topic of the article could possibly have an impact, since some articles of certain data channels would not be shared as often. The day the article was published may also contribute, since more people would be reading and sharing articles when they have time, such as over the weekend. Lastly, the subjectivity, polarity, and rate of positive and negative words may have an impact. Polarizing articles with a lot of positive and/or negative words may keep people wanting to discuss more about it, thus sharing it. Using this list, we can eliminate ambiguous and repetitive columns and only use what we deem valuable as features: 
+
+```{r}
+df <- df[, c(3, 4, 10, 11, 14, 15, 16, 17, 18, 19, 39, 45, 46, 47, 48, 59, 60, 61)]
+names(df)
+```
+
+The reasoning for choosing these specific columns will be discussed in the feature selection section. 
+
+Let's also check if there are any NA or NaN values in the columns of the dataset:
+
+```{r}
+colSums(is.na(df))
+```
+
+Luckily we have no NA or NaN values, so we can proceed without having to replace anything with the mean of the column. 
+
+Lastly, let's ensure all our columns are numeric or factors:
+
+```{r}
+sapply(df, typeof)
+```
+
+Since every column is numeric, we can continue to data exploration. 
+
+# Data exploration
+
+## R functions
+
+Let's use some R functions for data exploration.
+
+```{r}
+# Print the first 6 rows
+head(df)
+# Display the internal structure of the data frame
+str(df)
+# Print summary of dataset
+summary(df)
+# Print the average number of shares
+print(paste("Average shares:", mean(df$shares)))
+# Print the average global_subjectivity
+print(paste("Average global subjectivity:", mean(df$global_subjectivity)))
+```
+
+## R graphs
+
+Now let's create some informative R graphs for data exploration.
+
+```{r}
+# Histogram of published on weekend or not
+barplot(table(df$is_weekend), main = "Histogram of Articles published on Weekends", xlab = "Is weekend", ylab = "Frequency")
+# Histogram of global_subjectivity
+hist(df$global_subjectivity, main = "Histogram of Global Subjectivity", xlab = "Global Subjectivity", ylab = "Frequency")
+```
+
+Based on the graphs, we can see a much higher frequency of articles published on weekdays than weekends. This imbalance may prove to be an issue when building the models. Furthermore, we can see that global_subjectivity has a normal distribution in terms of number of articles. 
+
+# ML algorithms
+
+We will attempt to run 3 regression algorithms over this dataset - Linear Regression, kNN regression, and SVM regression. Before running each algorithm, let's discuss feature selection. 
+
+## Feature selection
+
+The features in the dataset that are used to determine the number of shares in social networks are as follows and their justification is as follows:
+
+* n_tokens_title - The length of the title may affect the readability of an article, and low readability may lead to less shares
+* n_tokens_content - Similarly, a lengthy article may affect readability
+* num_imgs - Images could keep an article engaging, potentially leading to more shares
+* num_videos - Similarly, engaging videos could lead to more shares
+* data_channel_is_lifestyle - Articles that are about lifestyle may have more shareable content, leading to more shares
+* data_channel_is_entertainment - Articles that are about entertainment may have more shareable content, leading to more shares
+* data_channel_is_bus - Articles that are about business may have more shareable content, leading to more shares
+* data_channel_is_socmed - Articles that are about social media may have more shareable content, leading to more shares
+* data_channel_is_tech - Articles that are about technology may have more shareable content, leading to more shares
+* data_channel_is_world - Articles that are about the world may have more shareable content, leading to more shares
+* is_weekend - Articles published over the weekend may coincide with people's schedules better, leading to more shares
+* global_subjectivity - Subjective articles may be shared more to promote discussion
+* global_sentiment_polarity - Polarizing articles may be shared more to promote discussion
+* global_rate_positive_words - Articles with a high rate of positive words may lead people to share more (or not)
+* global_rate_negative_words - Articles with a high rate of negative words may lead people to share more (or not)
+* abs_title_subjectivity - Articles with subjective titles may be shared more to promote discussion
+* abs_title_sentiment_polarity - Articles with polarizing titles may be shared more to promote discussion
+
+We can now start implementing our regression algorithms. Let's begin by splitting our data into train and test sets of 75% and 25% respectively. 
+
+```{r}
+# Set seed to ensure the same split of training and testing sets
+set.seed(1234)
+# Split the data
+i <- sample(1:nrow(df), nrow(df) * 0.75, replace = FALSE)
+train <- df[i, ]
+test <- df[-i, ]
+```
+
+## Code to run linear regression
+
+Now we can run linear regression over our predictors. 
+
+```{r}
+# Run linear regression
+lm1 <- lm(shares~., data = train)
+# Print summary of model
+summary(lm1)
+```
+
+Looking at the summary of the model, we can conclude that the data channel that the article is published in and global subjectivity are the most contributing factors to the number of shares. Sentiment polarity, title subjectivity & polarity, global rate of positive & negative words, number of images & videos, and title and content length have little to no impact on the number of shares.
+
+Now let's test the model over the testing set.
+
+```{r}
+# Make predictions based on the model
+pred1 <- predict(lm1, newdata = test)
+```
+
+## Linear regression metrics
+
+These predictions compute to be the following metrics:
+
+```{r}
+# Calculate and print the metrics of the predictions
+cor1 <- cor(pred1, test$shares)
+print(paste("Correlation:", cor1))
+mse1 <- mean((pred1 - test$shares)^2)
+print(paste("MSE:", mse1))
+rmse1 <- sqrt(mse1)
+print(paste("RMSE:", rmse1))
+```
+
+We see fairly poor performance when looking at all the metrics. A correlation of 0.1 is very low, and the MSE and RMSE of 107099708 and 10349 show that the linear regression model is easily prone to error.
+
+Let's try plotting the residuals of the linear regression model:
+
+```{r}
+par(mfrow=c(2, 2))
+plot(lm1)
+```
+
+1) Residuals vs. Fitted - We see a fairly horizontal trend line, which means we captured most of the variation in the data
+2) Normal Q-Q - The diagonal line is not diagonally straight, meaning that the residuals are not normally distributed
+3) Scale-Location - The line is fairly horizontal, but the points are not distributed equally around it, meaning that the data may not be homoscedastic
+4) Residuals vs. Leverage: We see both leverage points and outliers
+
+## Code for kNN regression
+
+Next we will try kNN regression using the same training and testing set from before so we get the most accurate comparison. Let's use 200 as our k-value, since that's the approximate square root of the number of rows in our data set. 
+
+```{r}
+library(caret)
+fit <- knnreg(train[, 1:17], train[, 18], k = 200)
+```
+
+Now let's test the model over the testing set.
+
+```{r}
+# Make predictions based on the model
+pred2 <- predict(fit, test[, 1:17])
+cor2 <- cor(pred2, test$shares)
+print(paste("Correlation:", cor2))
+```
+
+Let's see if scaling our data improves performance:
+
+```{r}
+train_scaled <- train[, 1:17] 
+means1 <- sapply(train_scaled, mean)
+stdvs1 <- sapply(train_scaled, sd)
+train_scaled <- scale(train_scaled, center=means1, scale=stdvs1)
+test_scaled <- scale(test[, 1:17], center=means1, scale=stdvs1)
+                      
+fit2 <- knnreg(train_scaled, train$shares, k = 200)
+pred3 <- predict(fit2, test_scaled)
+cor3 <- cor(pred3, test$shares)
+print(paste("Correlation:", cor3))
+```
+
+Since scaling improves performance, let's used the scaled model. 
+
+## kNN regression metrics
+
+These predictions compute to be the following metrics:
+
+```{r}
+# Calculate and print the metrics of the predictions
+print(paste("Correlation:", cor3))
+mse2 <- mean((pred3 - test$shares)^2)
+print(paste("MSE:", mse2))
+rmse2 <- sqrt(mse2)
+print(paste("RMSE:", rmse2))
+```
+
+Once again, we see fairly poor performance when looking at all the metrics. A correlation of 0.09 is very low, even lower than our linear regression model. The MSE and RMSE of 107610882 and 10374 show that the kNN regression model is easily prone to error, even more than the linear regression model.
+
+# Code for SVM regression
+
+Lastly, we will try radial SVM regression once again using the same training and testing set from before so we get the most accurate comparison.
+
+```{r}
+library(e1071)
+svm1 <- svm(shares~., data=train, kernel="radial", cost=1, gamma=1, scale=FALSE)
+summary(svm1)
+```
+
+We see that there were 29716 support vectors generated overall. Now let's test the model over the testing set.
+
+```{r}
+pred4 <- predict(svm1, newdata=test)
+```
+
+## kNN regression metrics
+
+These predictions compute to be the following metrics:
+
+```{r}
+cor_svm1 <- cor(pred4, test$shares)
+print(paste("Correlation:", cor_svm1))
+mse_svm1 <- mean((pred4 - test$shares)^2)
+print(paste("MSE:", mse_svm1))
+rmse_svm1 <- sqrt(mse_svm1)
+print(paste("RMSE:", rmse_svm1))
+```
+
+Similar to the first two models, we once again see fairly poor performance when looking at all the metrics. A correlation of 0.02 is very low, the worst of the three models we tested. The MSE and RMSE of 111766834 and 10572 show that the SVM regression model is easily prone to error, even more than the kNN and linear regression models.
+
+# Results analysis
+
+When analyzing the results of the algorithms, it is important to take into account all the metrics that we calculated earlier. These being correlation, MSE, and RMSE.
+
+## Performance and rankings
+
+Linear regression showed to have the highest correlation of the three models of 0.1, followed by kNN regression at 0.09 and SVM regression at 0.02. Linear regression also had the best MSE and RMSE of 107099708 and 10349, followed by kNN regression's values of 107610882 and 10373, and SVM regression's values of 111766833 and 10572. Based on all these metrics, I believe the following is the correct rankings for the three algorithms:
+
+1) Linear Regression
+2) kNN regression
+3) SVM regression
+
+Linear regression is clearly the best performing algorithm because it has the best correlation value and MSE and RMSE values, showing that it has the best predictive value and is the least prone to errors. I believe that kNN regression performs better than SVM regression because it has a better correlation and MSE and RMSE values. 
+
+## Why Linear Regression was the best
+
+Let's compare linear regression with the kNN regression and SVM regression algorithms to see why it may have performed better in our data set. Let's also compare kNN and SVM regression, since there was a large disparity between the two. 
+
+### Linear Regression vs. kNN regression
+
+The biggest benefit of linear regression when comparing it to kNN regression is that linear regression is better at handling noise. In a dataset with so many features and observations, we probably have to handle a lot of noise as opposed to signals in our data. Because of this, the linear regression model may have shown to have a better correlation and better MSE and RMSE values compared to kNN regression. Furthermore, linear regression is a parametric model while kNN regression is a non-parametric model. Because of this, linear regression is much faster at recognizing and computing the coefficients for each feature, while kNN is much slower and has to keep track of all the training data to find the neighbor nodes. This once again will not be as good at handling noise that may interfere with the neighbor field of each node being trained and tested through kNN.
+
+### Linear Regression vs. SVM regression
+
+Just looking at the number of support vectors our SVM regression algorithm created, which was 29716, we immediately knew that there was little to no regularity in our data. This meant that using the support vectors to try and find correlations between our attributes and target variable would be very difficult, as almost each attribute had it's own support vector. Likely because of this, we saw the lowest correlation for our SVM regression of 0.02. Our SVM regression algorithm seemed to have overfit our data set by a large margin, rendering it almost useless compared to our linear regression model. Although SVM takes care of outliers better than linear regression, we saw in our residual plots that there were not many outliers in our data set, meaning that we didn't have to worry about this.
+
+### kNN regression vs. SVM regression
+
+I wanted to compare these two algorithms to specifically point out that SVM regression is much worse at handling a large training set compared to kNN regression. kNN regression is the most effective when the number of observations is drastically greater than the number of features. Although SVM regression takes care of outliers better than kNN regression, we saw in our residual plots that there were not many outliers in our data set, meaning that we didn't have to worry about this. 
+
+## Big picture
+
+Although our regression models by themselves would not be very effective at predicting the number of shares on social media for an article based on it's features, we still learned a lot from attempting to run regression models over this data set. We learned that the data channel or topic of an article has a significant impact on the number of shares it gets on social media. Articles about entertainment, business, technology, and the world seem to be the most impactful. Furthermore, the subjectivity of the actual content of the article has much more to do with the number of shares than the subjectivity of the title. Instead, the length of the title has a lot more to do with the number of shares than the actual title. With this information, writers and publishers would know to make sure the title is short and catchy and instead focus on making the actual content of the articles subjective in order to increase the number of shares on social media. 

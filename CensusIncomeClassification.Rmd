@@ -1,0 +1,371 @@
+---
+title: "ML 4375 Project 2 - Classification"
+author: "Supratik Pochampally"
+abstract: "For my classification dataset, I chose the Census Income dataset from the UCI Machine Learning Repository. The purpose of the dataset is to use attributes such as age, education level, and others to predict if a person's income exceeds $50k/yr, with attributes collected from census data."
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Dataset
+
+Let's start by reading in the dataset and printing the number of rows and column names:
+
+```{r}
+# Read in the .csv file of the data set
+df <- read.csv("CensusIncome.csv", header = TRUE)
+# Print number of rows
+print(paste("Number of rows:", nrow(df)))
+# Print attributes
+names(df)
+```
+
+We see that the data set is large, with 32,561 rows and many columns, some being very ambiguously named. 
+
+# Data cleaning
+
+Link to source: https://archive.ics.uci.edu/ml/datasets/Adult
+
+Because the dataset is messy and needs cleaning, we will identify what predictors we want to use to predict our target column, being the "income" column.
+
+The "fnlwgt" attribute has no documentation in the description of the dataset, so we want to remove it in case it is a non-predictive column that messes with our models in the future. We also want to deal with the "native.country" column, since there are many different countries a person can be from. Because the United States is likely the most common country, let's see how many instances in the data-frame have the native-country of "United-States":
+
+```{r}
+# Find number of instances of "United States"
+numUS <- length(which(df$native.country == " United-States"))
+print(paste("Number of instances with United States as native.country:", numUS))
+```
+
+Because this is a large majority of our dataset, making it very imbalanced, we can remove this column altogether.Also, the "capital.loss" and "capital.gain" columns do not have description, and are both very ambiguous, which we also want to remove. Furthermore, the "marital.status" and "relationship" columns represent similar things, so we can remove "relationship" altogether. Lastly, the "education" and "education.num" column have the same data, but the "education.num" column assigns numerical values to the education level. Thus, we will remove the "education" column.
+
+```{r}
+df <- df[-c(3, 4, 8, 11, 12, 14)]
+names(df)
+```
+
+Let's also check if there are any NA or NaN values in the columns of the dataset:
+
+```{r}
+colSums(is.na(df))
+```
+
+Luckily we have no NA or NaN values, so we can proceed without having to replace anything with the mean of the column. 
+
+Lastly, let's factorize some of our discrete, categorical predictors that are currently characters.
+
+```{r}
+df$workclass <- as.factor(df$workclass)
+df$marital.status <- as.factor(df$marital.status)
+df$occupation <- as.factor(df$occupation)
+df$race <- as.factor(df$race)
+df$sex <- as.factor(df$sex)
+df$income <- as.factor(df$income)
+```
+
+# Data exploration
+
+## R functions
+
+Let's use some R functions for data exploration.
+
+```{r}
+# Print the first 6 rows
+head(df)
+# Display the internal structure of the data frame
+str(df)
+# Print summary of dataset
+summary(df)
+# Print the average age
+print(paste("Average age:", mean(df$age)))
+# Print the average education level
+print(paste("Average education level:", mean(df$education.num)))
+```
+
+Although the education.num average doesn't mean much by itself, we know from the description of the data set that 10.081 is approximately some-college education. 
+
+## R graphs
+
+Now let's create some informative R graphs for data exploration.
+
+```{r}
+# Histogram of race
+barplot(table(df$race), main = "Histogram of races", xlab = "Race", ylab = "Frequency")
+# Conditional plot of education level and income
+cdplot(df$education.num, df$income, main = "Conditional plot of income class and education level", xlab = "Education Level", ylab = "Income class")
+```
+
+Based on the graphs, we can see a much higher frequency of the the rows are White, followed by Black. This imbalance may prove to be an issue when building the models. Furthermore, as I thought, there is a clear correlation between education level and income. 
+
+# ML algorithms
+
+We will attempt to run 3 classification algorithms over this dataset - Logistic Regression, Naive Bayes, and Decision Tree classification. Before running each algorithm, let's discuss feature selection. 
+
+## Feature selection
+
+The features in the dataset that are used to determine whether or not a person has an income above or below $50K are age, workclass, education.num, marital.status, occupation, race, sex, and hours.per.week. The reasons for eliminating other attributes was discussed in the data cleaning section above. We will now be discussing why these features were selected. Logically, hours worked per week, occupation, and workclass would likely have some correlation with income. These attributes deal directly with the amount someone works as well as their specialization of work, such which involves the occupation they work in as well as the specific workclass that occupation falls under. Education level similarly deals with how educated a person is, which would determine how skilled they are. Skilled labor obviously entails a higher income than unskilled labor, so this would also likely be an significant feature. Age somewhat coincides with the same reasons as education level, as work experience will come with age and will usually increase job prospects and therefore income. Marital status is important in many countries, as you are usually taxed based on your marital status. Lastly, race and sex can help us explore the softer side of some factors that can affect income. This involves gender and racial inequality with things such as wage gaps between people.
+
+We can now start implementing our classification algorithms. Let's begin by splitting our data into train and test sets of 75% and 25% respectively. 
+
+```{r}
+# Set seed to ensure the same split of training and testing sets
+set.seed(1234)
+# Split the data
+i <- sample(1:nrow(df), nrow(df) * 0.75, replace = FALSE)
+train <- df[i, ]
+test <- df[-i, ]
+```
+
+## Code to run logistic regression
+
+Now we can run logistic regression over our predictors. 
+
+```{r}
+# Run logistic regression
+glm1 <- glm(income~., data = train, family = "binomial")
+# Print summary of model
+summary(glm1)
+```
+
+Looking at the summary of the model, we can conclude that age, workclass, education level, occupation, and hours per week are very significantly correlated to income. martial.status is slightly correlated, especially between married and never married, and race and sex are not significant. 
+
+Now let's test the model over the testing set.
+
+```{r}
+# Assign probabilities and predictions based on the model
+probs1 <- predict(glm1, newdata = test, type = "response")
+pred1 <- ifelse(probs1 > 0.5, ">50K", "<=50K")
+# Print the confusion matrix of the predictions vs. the test set
+table(pred1, test$income)
+```
+
+Looking at the table, we see that we got 5691 true positives, 1079 true negatives, 917 false positives, and 454 false negatives. 
+
+## Logistic regression metrics
+
+These predictions compute to be the following metrics:
+
+```{r}
+# Calculate and print the accuracy
+acc1 <- (5691 + 1079) / (5691 + 1079 + 917 + 454)
+print(paste("Accuracy:", acc1))
+# Calculate and print the sensitivity
+sensitivity1 <- (5691) / (5691 + 454)
+print(paste("Sensitivity:", sensitivity1))
+# Calculate and print the specificity
+specificity1 <- (1079) / (1079 + 917)
+print(paste("Specificity:", specificity1))
+```
+
+We see that accuracy and sensitivity are good, but the specificity is lacking. This means we are overestimating incomes of certain people. 
+
+We can also use an ROC curve and AUC value to observe the performance.
+
+```{r}
+# Plot the ROC curve
+library(ROCR)
+pr1 <- prediction(probs1, test$income)
+prf1 <- performance(pr1, measure = "tpr", x.measure = "fpr")
+plot(prf1)
+# Calculate and print the AUC value
+auc1 <- performance(pr1, measure = "auc")
+auc1 <- auc1@y.values[[1]]
+print(paste("AUC:", auc1))
+```
+
+We see that the ROC curve shoots upwards and to the right with a little space left on the top left. We also have a fairly high AUC value, which means our predictive value is decent. 
+
+## Code for Naive Bayes
+
+Next we will try Naive Bayes using the same training and testing set from before so we get the most accurate comparison. 
+
+```{r}
+library(e1071)
+nb1 <- naiveBayes(income~., data = train)
+summary(nb1)
+nb1
+```
+
+From the summary of the classifier and the probabilities themselves, we can conclude that our dataset is overall quite imbalanced, as 76.1% of the observations have an income >=50K while the remaining 23.9% have an income <50K. We see a clear difference in the average level of education between low and high income, with a difference of two education levels between each of the classes. The average age of high income is 44.23, while the average age of low income is 36.81. The probability of high income when your married to a civilian spouse is 85.44%, with a probability of only 0.137% if married to a spouse in the Armed Forces. There is also a significant disparity of probability of high income between male and female sex, with a probability of 84.7% over 15.3%. Lastly, the average hours worked per week of someone with high income is 45.45 hours, while the average hours worked per week of someone with low income is 38.84 hours.
+
+Now let's test the model over the testing set. 
+
+```{r}
+pred2 <- predict(nb1, newdata = test, type = "class")
+table(pred2, test$income)
+```
+
+Looking at the table, we see that we got 5362 true positives, 1313 true negatives, 683 false positives, and 783 false negatives. 
+
+## Naive Bayes metrics
+
+These predictions compute to be the following metrics:
+
+```{r}
+acc2 <- (5362 + 1313) / (5362 + 1313 + 683 + 783)
+print(paste("Accuracy:", acc2))
+# Calculate and print the sensitivity
+sensitivity2 <- (5362) / (5362 + 783)
+print(paste("Sensitivity:", sensitivity2))
+# Calculate and print the specificity
+specificity2 <- (1313) / (1313 + 683)
+print(paste("Specificity:", specificity2))
+```
+
+We see that accuracy and sensitivity are once again decent, but this time the specificity is also a little better. This means we are overestimating incomes of certain people slightly less than we did with logistic regression. 
+
+We can also use an ROC curve and AUC value to observe the performance.
+
+```{r}
+# Plot the ROC curve
+predvec1 <- ifelse(as.character(pred2) == " >50K", 1, 0)
+realvec1 <- ifelse(as.character(test$income) == " >50K", 1, 0)
+pr2 <- prediction(predvec1, realvec1)
+prf2 <- performance(pr2, measure = "tpr", x.measure = "fpr")
+plot(prf2)
+# Calculate and print the AUC value
+auc2 <- performance(pr2, measure = "auc")
+auc2 <- auc2@y.values[[1]]
+print(paste("AUC:", auc2))
+```
+
+We see that the ROC curve shoots upwards and to the right in a straighter with slightly more space left on the top left. We also have a fairly lower AUC value compared to that of logistic regression, which means our predictive value is not as good.
+
+# Code for Decision Tree
+
+Lastly, we will try Decision Tree classification once again using the same training and testing set from before so we get the most accurate comparison. 
+
+```{r}
+# Run decision tree classification
+library(tree)
+tree1 <- tree(income~., data = train)
+# Plot decision tree
+plot(tree1)
+text(tree1, cex = 0.75, pretty = 1)
+```
+
+Because our data is fairly complex, the actual decision tree diagram is fairly unclear and hard to read. Instead, we can try interpreting the decision tree outline:
+
+```{r}
+# Print decision tree outline
+tree1
+```
+
+The output above is slightly unclear, so I copy-pasted it down below:
+
+***
+
+node), split, n, deviance, yval, (yprob)
+* denotes terminal node
+
+| 1) root 24420 26880 <=50K ( 0.76065 0.23935 )
+|     2) marital.status: Divorced, Married-spouse-absent, Never-married, Separated, Widowed 13163 6264 <=50K ( 0.93596 0.06404 )
+|         4) education.num < 12.5 10461 2951 <=50K ( 0.96817 0.03183 ) *
+|         5) education.num > 12.5 2702 2618 <=50K ( 0.81125 0.18875 ) *
+|     3) marital.status: Married-AF-spouse, Married-civ-spouse 11257 15470 <=50K ( 0.55565 0.44435 )
+|         6) education.num < 12.5 7863 9980 <=50K ( 0.66934 0.33066 )
+|                 12) occupation: ?, Armed-Forces, Craft-repair, Farming-fishing, Handlers-cleaners, Machine-op-inspct, Other-service, Priv-house-serv, Transport-moving 4835 5383 <=50K ( 0.75512 0.24488 ) *
+|                 13) occupation: Adm-clerical, Exec-managerial, Prof-specialty, Protective-serv, Sales, Tech-support 3028 4185 <=50K ( 0.53236 0.46764 ) *
+|         7) education.num > 12.5 3394 4101 >50K ( 0.29228 0.70772 ) *
+
+***
+
+As seen in the decision tree outline, splits education level have the most significant probabilities, followed my splits in occupation and lastly splits in marital status. 
+
+Let's now test the model over the testing set.
+
+```{r}
+pred3 <- predict(tree1, newdata = test, type = "class")
+table(pred3, test$income)
+```
+
+Looking at the table, we see that we got 5882 true positives, 816 true negatives, 1180 false positives, and 263 false negatives. 
+
+## Decision Tree metrics
+
+These predictions compute to be the following metrics:
+
+```{r}
+acc3 <- (5882 + 816) / (5882 + 816 + 1180 + 263)
+print(paste("Accuracy:", acc3))
+# Calculate and print the sensitivity
+sensitivity3 <- (5882) / (5882 + 263)
+print(paste("Sensitivity:", sensitivity3))
+# Calculate and print the specificity
+specificity3 <- (816) / (816 + 1180)
+print(paste("Specificity:", specificity3))
+```
+
+We see that accuracy and sensitivity are once again decent, but this time the specificity is even worse. This means we are overestimating incomes of certain people the most out of all three models.
+
+We can try pruning our tree to see if our performance improves:
+
+```{r}
+tree1_pruned <- prune.tree(tree1, best=5)
+pred4 <- predict(tree1_pruned, newdata = test, type = "class")
+table(pred4, test$income)
+```
+
+This didn't change our predictions at all, so we can continue analyzing the original tree. 
+
+We can use an ROC curve and AUC value to observe the performance.
+
+```{r}
+# Plot the ROC curve
+predvec2 <- ifelse(as.character(pred3) == " >50K", 1, 0)
+realvec2 <- ifelse(as.character(test$income) == " >50K", 1, 0)
+pr3 <- prediction(predvec2, realvec2)
+prf3 <- performance(pr3, measure = "tpr", x.measure = "fpr")
+plot(prf3)
+# Calculate and print the AUC value
+auc3 <- performance(pr3, measure = "auc")
+auc3 <- auc3@y.values[[1]]
+print(paste("AUC:", auc3))
+```
+
+We see that the ROC curve shoots upwards and to the right in a straighter with even more space left on the top left. We also have the lowest AUC value of all three models, which means our predictive value is the worst of the three.
+
+# Results analysis
+
+When analyzing the results of the algorithms, it is important to take into account all the metrics that we calculated earlier. These being accuracy, sensitivity, specificity, ROC curve, and AUC value.
+
+## Performance and rankings
+
+Logistic regression showed to have the highest accuracy of the three models of 0.832 followed by 0.820 for Naive Bayes and 0.823, but had a worse sensitivity than the decision tree algorithm. However, this came at a cost since decision tree had the lowest specificity of 0.41. Regardless of it's high sensitivity, it's low specificity shows that the decision tree algorithm is only good at predicting when someone has an income <=50K. Logistic regression also had the highest AUC or area under curve value of 0.88, followed by Naive Bayes at 0.77 and then decision tree at 0.68. This is further depicted by each algorithm's ROC curve, where logistic regression's shoots up farther than Naive Bayes's and decision tree's ROC curves. Based on all these metrics, I believe the following is the correct rankings for the three algorithms:
+
+1) Logistic Regression
+2) Naive Bayes
+3) Decision Tree
+
+Logistic regression is clearly the best performing algorithm because it has both the best accuracy and best predictive value given it's AUC and ROC curve. I believe that Naive Bayes performs better than decision tree because it has a better accuracy. Although decision tree has a better sensitivity than both logistic regression and Naive Bayes and has a slightly better accuracy than Naive Bayes, it's specificity is lacking to the point where it is only good at predicting one class of the target, which is why Naive Bayes performs better than it overall as seen by it's better AUC value than decision tree. 
+
+## Why Logistic Regression was the best
+
+Let's compare logistic regression with the Naive Bayes and decision tree algorithms to see why it may have performed better in our data set.
+
+### Logistic Regression vs. Naive Bayes
+
+Logistic regression is a discriminative classifier, meaning that it directly estimates the parameters of P(Y|X). Naive Bayes is a generative classifier, meaning that it directly estimates parameters or P(Y) and P(X|Y). Naive Bayes also has the naive assumption, which assumes that each predictor is independent of each other. If this assumption holds true, which it generally doesn't, then logistic regression and Naive Bayes over the same data set as the training set approaches infinity would converge towards very similar classifiers. In this dataset, we see some predictors that could be not independent, such as workclass and occupation. This would somewhat hurt the performance of Naive Bayes, which could suggest why it had worse performance than logistic regression. Furthermore, Naive Bayes will generally do better with smaller data sets, while logistic regression will improve in performance as the size of the data set increases. Because the size of our data set was so big, this could suggest why logistic regression performed better than Naive Bayes. 
+
+### Logistic Regression vs. Decision Tree
+
+Decision tree classification is very prone to overfitting. Even after pruning the data to help generalize it, we saw no improved performance, further instating the fact that the classifier was likely heavily overfitted. Although the assignment asked for no Random Forest/Boosting, this may have helped overcome the high variance that we see with most decision tree classifiers. Since we were restricuted from doing so, however, we were left with a poor performing decision tree classifier compared to our logistic regression classifier. 
+
+## Big picture
+
+Our classifiers were able to to learn about some factors that may contribute to being high or low income. Specifically, we were able to see the impact of age, workclass, education level, marital status, occupation, race, sex, and hours per week on income level. from our models, we specifically saw that age, education level, sex, and hours-per-week had the largest impact on income. It was interesting to see that sex had a much larger impact on income than race did. This information is useful because we now have a better idea of gender inequality and it's actual statistical impact on a person's income. Education level and hours-per-week were pretty obvious indicators of a person's income, so this information was not as useful. We also saw that white people had a much higher probability of being in the higher income bracket, but this could be due to a much larger number of observations being from white people. In the big picture, we can use these factors to help balance out the factors that provide an unfair increase in income, such as things like sex. We can also observe how marital-status affects income, and explore ideas of whether or not we think it's fair to tax based on marital status.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
